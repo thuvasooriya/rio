@@ -10,18 +10,7 @@ const Terminal = term_mod.Terminal;
 const Color = term_mod.Color;
 const prog = @import("progress.zig");
 const version = @import("../version.zig");
-
-fn getThroughputColor(gbps: f64) Color {
-    if (gbps >= 5.0) return .green;
-    if (gbps >= 1.0) return .cyan;
-    return .yellow;
-}
-
-fn getLatencyColor(latency_us: f64) Color {
-    if (latency_us < 1.0) return .green;
-    if (latency_us < 10.0) return .cyan;
-    return .yellow;
-}
+const theme = @import("theme.zig");
 
 pub fn run(allocator: std.mem.Allocator) !void {
     const options = Args.parse(allocator) catch |err| {
@@ -114,21 +103,6 @@ pub fn run(allocator: std.mem.Allocator) !void {
     var benchmark = Benchmark.init(allocator);
     defer benchmark.deinit();
 
-    // prepare file with spinner
-    if (!options.json_output) {
-        var spinner = prog.Spinner.init(terminal, .dots, "Preparing test file...");
-
-        // simulate spinner updates during file preparation
-        try spinner.tick();
-
-        try benchmark.prepareFile(test_path, options.file_size, options.block_size, options.verbose);
-
-        // clear spinner without showing completion message
-        try spinner.clear();
-    } else {
-        try benchmark.prepareFile(test_path, options.file_size, options.block_size, false);
-    }
-
     var reporter = Reporter.init(allocator, terminal, options.json_output);
     const pattern_filter = options.pattern orelse .all;
 
@@ -148,8 +122,11 @@ pub fn run(allocator: std.mem.Allocator) !void {
     }
 
     // prepare header lines for the box (config section)
-    const path_line = try std.fmt.allocPrint(allocator, "path: {s}", .{target_dir});
-    defer allocator.free(path_line);
+    const version_line = if (terminal.use_ansi)
+        try std.fmt.allocPrint(allocator, "{s}rio{s} {s}v{s}{s}", .{ theme.default.app_name.code(), Color.reset.code(), theme.default.version.code(), version.version, Color.reset.code() })
+    else
+        try std.fmt.allocPrint(allocator, "rio v{s}", .{version.version});
+    defer allocator.free(version_line);
 
     const size_str = if (options.file_size >= 1024 * 1024 * 1024)
         try std.fmt.allocPrint(allocator, "{d}GB", .{options.file_size / (1024 * 1024 * 1024)})
@@ -158,10 +135,33 @@ pub fn run(allocator: std.mem.Allocator) !void {
     defer allocator.free(size_str);
 
     const block_kb = options.block_size / 1024;
-    const settings_line = try std.fmt.allocPrint(allocator, "size: {s}  |  block: {d} KB  |  duration: {d}s  |  mode: {s}", .{ size_str, block_kb, options.duration, @tagName(options.io_mode) });
+    const settings_line = if (terminal.use_ansi)
+        try std.fmt.allocPrint(allocator, "{s}{s}{s} · {d}KB blocks · {s}{s}{s} · {d}s  · {s}", .{ theme.default.config_highlight.code(), size_str, Color.reset.code(), block_kb, theme.default.config_highlight.code(), @tagName(options.io_mode), Color.reset.code(), options.duration, target_dir })
+    else
+        try std.fmt.allocPrint(allocator, "{s} · {d}KB blocks · {s} · {d}s  · {s}", .{ size_str, block_kb, @tagName(options.io_mode), options.duration, target_dir });
     defer allocator.free(settings_line);
 
-    const header_lines = [_][]const u8{ path_line, settings_line };
+    const header_lines = [_][]const u8{ version_line, settings_line };
+
+    // prepare file with spinner inside the box
+    if (!options.json_output) {
+        const prep_message = if (terminal.use_ansi)
+            try std.fmt.allocPrint(allocator, "{s}⠋{s} Preparing test file...", .{ theme.default.spinner.code(), Color.reset.code() })
+        else
+            try std.fmt.allocPrint(allocator, "⠋ Preparing test file...", .{});
+        defer allocator.free(prep_message);
+
+        const prep_lines = [_][]const u8{prep_message};
+        const box_line_count = try terminal.printBoxWithDivider(&header_lines, &prep_lines, 66);
+        try terminal.flush();
+
+        try benchmark.prepareFile(test_path, options.file_size, options.block_size, options.verbose);
+
+        // clear the box with preparation message
+        try terminal.clearLines(box_line_count);
+    } else {
+        try benchmark.prepareFile(test_path, options.file_size, options.block_size, false);
+    }
 
     // store results for progressive box drawing
     var results = std.ArrayList(Metrics.BenchmarkResult){};
@@ -182,8 +182,8 @@ pub fn run(allocator: std.mem.Allocator) !void {
     }
 
     // calculate minimum box width based on expected content
-    // typical completed line: "✓ Sequential Read    3.86 Gbps  |  1.0M IOPS  |  0.90μs avg"
-    const min_box_width: usize = 66;
+    // typical completed line: "✓ Sequential Read    236.67 Mbps ·   61K IOPS ·  16.41μs"
+    const min_box_width: usize = 0;
 
     var box_line_count: usize = 0; // track how many lines the unified box uses
     var first_json = true; // for JSON output comma handling
@@ -224,7 +224,7 @@ pub fn run(allocator: std.mem.Allocator) !void {
                 const min_width = state_min_box_width;
 
                 const throughput_gbps = throughput_bps / 1_000_000_000.0;
-                const throughput_color = getThroughputColor(throughput_gbps);
+                const throughput_color = theme.getThroughputColor(throughput_gbps);
 
                 // build spinner line
                 const frames = prog.SpinnerStyle.dots.frames();
@@ -235,27 +235,26 @@ pub fn run(allocator: std.mem.Allocator) !void {
                 const spinner_line = if (term.use_ansi)
                     std.fmt.allocPrint(
                         alloc,
-                        "{s}{s}{s} {s: <18} {s}{d:>3.1}s{s} / {d:.1}s  |  {s}{d:>4.2} Gbps{s}{s: <18}",
+                        "{s}{s}{s} {s: <18} {s}{d:>3.1}s{s} / {d:.1}s · {s}{d:>4.2} Gbps{s}",
                         .{
-                            Color.cyan.code(),
+                            theme.default.spinner.code(),
                             frame,
                             Color.reset.code(),
                             name,
-                            Color.dim.code(),
+                            theme.default.elapsed_time.code(),
                             elapsed_s,
                             Color.reset.code(),
                             total_s,
                             throughput_color.code(),
                             throughput_gbps,
                             Color.reset.code(),
-                            "",
                         },
                     ) catch return
                 else
                     std.fmt.allocPrint(
                         alloc,
-                        "{s} {s: <18} {d:>3.1}s / {d:.1}s  |  {d:>4.2} Gbps{s: <18}",
-                        .{ frame, name, elapsed_s, total_s, throughput_gbps, "" },
+                        "{s} {s: <18} {d:>3.1}s / {d:.1}s · {d:>4.2} Gbps",
+                        .{ frame, name, elapsed_s, total_s, throughput_gbps },
                     ) catch return;
 
                 // free previous spinner line
@@ -345,15 +344,15 @@ pub fn run(allocator: std.mem.Allocator) !void {
                 var iops_buffer: [32]u8 = undefined;
                 const iops_str = try Reporter.formatIOPS(res.iops.operations_per_second, &iops_buffer);
 
-                const throughput_color = getThroughputColor(gbps);
-                const latency_color = getLatencyColor(res.latency.avg_us);
+                const throughput_color = theme.getThroughputColor(gbps);
+                const latency_color = theme.getLatencyColor(res.latency.avg_us);
 
                 const line = if (terminal.use_ansi)
                     try std.fmt.allocPrint(
                         allocator,
-                        "{s}✓{s} {s: <18} {s}{d:>4.2} {s}{s}  |  {s}{s} IOPS{s}  |  {s}{d:>4.2}μs{s} avg",
+                        "{s}✓{s} {s: <18} {s}{d:>6.2} {s: <4}{s} · {s}{s: >5} IOPS{s} · {s}{d:>6.2}μs{s}",
                         .{
-                            Color.green.code(),
+                            theme.default.checkmark.code(),
                             Color.reset.code(),
                             res.test_name,
                             throughput_color.code(),
@@ -371,7 +370,7 @@ pub fn run(allocator: std.mem.Allocator) !void {
                 else
                     try std.fmt.allocPrint(
                         allocator,
-                        "✓ {s: <18} {d:>4.2} {s}  |  {s} IOPS  |  {d:>4.2}μs avg",
+                        "✓ {s: <18} {d:>6.2} {s: <4} · {s: >5} IOPS · {d:>6.2}μs",
                         .{ res.test_name, throughput_value, throughput_unit, iops_str, res.latency.avg_us },
                     );
                 try content_lines.append(allocator, line);
