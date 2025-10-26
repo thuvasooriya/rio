@@ -1,15 +1,31 @@
 const std = @import("std");
 const windows = std.os.windows;
 
+pub const AccessPattern = enum {
+    sequential,
+    random,
+};
+
 pub fn openDirect(path: []const u8, mode: anytype) !windows.HANDLE {
+    return openWithPattern(path, mode, null);
+}
+
+pub fn openWithPattern(path: []const u8, mode: anytype, pattern: ?AccessPattern) !windows.HANDLE {
     const path_w = try std.unicode.utf8ToUtf16LeAllocZ(std.heap.page_allocator, path);
     defer std.heap.page_allocator.free(path_w);
 
-    const flags: windows.DWORD = switch (mode) {
+    var flags: windows.DWORD = switch (mode) {
         .direct => windows.FILE_FLAG_NO_BUFFERING | windows.FILE_FLAG_WRITE_THROUGH,
         .buffered => 0,
         .sync => windows.FILE_FLAG_WRITE_THROUGH,
     };
+
+    if (pattern) |p| {
+        flags |= switch (p) {
+            .sequential => windows.FILE_FLAG_SEQUENTIAL_SCAN,
+            .random => windows.FILE_FLAG_RANDOM_ACCESS,
+        };
+    }
 
     const handle = windows.kernel32.CreateFileW(
         path_w.ptr,
@@ -64,4 +80,19 @@ pub fn writeFile(handle: windows.HANDLE, offset: u64, data: []const u8) !usize {
     }
 
     return bytes_written;
+}
+
+pub fn fastFillFile(handle: windows.HANDLE, size: u64, pattern_buffer: []const u8) !void {
+    var written: u64 = 0;
+    const chunk_size = pattern_buffer.len;
+
+    while (written < size) {
+        const to_write = @min(chunk_size, size - written);
+        const bytes = try writeFile(handle, written, pattern_buffer[0..to_write]);
+        written += bytes;
+    }
+
+    if (windows.kernel32.FlushFileBuffers(handle) == 0) {
+        return error.SyncFailed;
+    }
 }

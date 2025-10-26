@@ -57,12 +57,13 @@ rio /tmp --json > results.json
 
 ## documentation
 
-- `docs/CHANGELOG.md` - track changes and progress
-- `docs/IMPLEMENTATION.md` - technical implementation details
-- `docs/TODO.md` - planned improvements and tasks
-- `docs/CONTRIBUTING.md` - contribution guidelines
-- `AGENTS.md` - coding standards and conventions
+- [CHANGELOG.md](docs/CHANGELOG.md) - track changes and progress
+- [IMPLEMENTATOIN.md](docs/IMPLEMENTATOIN.md) - technical implementation details
+- [TODO.md](docs/TODO.md) planned improvements and tasks
+- [CONTRIBUTING.md](docs/CONTRIBUTING.md) - contribution guidelines
+- [AGENTS.md](AGENTS.md) - coding standards and conventions
 
 ## license
 
+authored by @thuvasooriya and co-authored by claude-sonnet-4.5
 MIT

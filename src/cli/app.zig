@@ -213,7 +213,7 @@ pub fn run(allocator: std.mem.Allocator) !void {
             var state_current_spinner_line: ?*?[]u8 = null;
             var state_min_box_width: usize = 0;
 
-            fn callback(elapsed_s: f64, total_s: f64, throughput_bps: f64) void {
+            fn progress_callback(elapsed_s: f64, total_s: f64, throughput_bps: f64) void {
                 const term = state_terminal orelse return;
                 const alloc = state_allocator orelse return;
                 const name = state_pattern_name orelse return;
@@ -281,6 +281,66 @@ pub fn run(allocator: std.mem.Allocator) !void {
                 line_count_ptr.* = new_line_count;
                 term.flush() catch {};
             }
+
+            fn completion_callback() void {
+                const term = state_terminal orelse return;
+                const alloc = state_allocator orelse return;
+                const name = state_pattern_name orelse return;
+                const headers = state_header_lines orelse return;
+                const contents = state_content_lines orelse return;
+                const line_count_ptr = state_box_line_count orelse return;
+                const spinner_line_ptr = state_current_spinner_line orelse return;
+                const min_width = state_min_box_width;
+
+                // show a single frame indicating completion and calculation
+                const frames = prog.SpinnerStyle.dots.frames();
+                const frame = frames[frames.len - 1];
+
+                // build calculating message line with spinner
+                const calc_line = if (term.use_ansi)
+                    std.fmt.allocPrint(
+                        alloc,
+                        "{s}{s}{s} {s: <18} {s}Calculating results...{s}",
+                        .{
+                            theme.default.spinner.code(),
+                            frame,
+                            Color.reset.code(),
+                            name,
+                            theme.default.elapsed_time.code(),
+                            Color.reset.code(),
+                        },
+                    ) catch return
+                else
+                    std.fmt.allocPrint(
+                        alloc,
+                        "{s} {s: <18} Calculating results...",
+                        .{ frame, name },
+                    ) catch return;
+
+                // free previous spinner line
+                if (spinner_line_ptr.*) |old| alloc.free(old);
+                spinner_line_ptr.* = calc_line;
+
+                // clear previous box
+                if (line_count_ptr.* > 0) {
+                    term.flush() catch {};
+                    term.clearLines(line_count_ptr.*) catch return;
+                }
+
+                // build full content array: completed results + calculating message
+                var full_content = std.ArrayList([]const u8).initCapacity(alloc, contents.items.len + 1) catch return;
+                defer full_content.deinit(alloc);
+
+                for (contents.items) |line| {
+                    full_content.appendAssumeCapacity(line);
+                }
+                full_content.appendAssumeCapacity(calc_line);
+
+                // draw unified box
+                const new_line_count = term.printBoxWithDivider(headers, full_content.items, min_width) catch return;
+                line_count_ptr.* = new_line_count;
+                term.flush() catch {};
+            }
         };
 
         if (!options.json_output) {
@@ -301,7 +361,8 @@ pub fn run(allocator: std.mem.Allocator) !void {
             .file_size = options.file_size,
             .io_mode = options.io_mode,
             .pattern_type = .random,
-            .progress_callback = if (!options.json_output) &CallbackState.callback else null,
+            .progress_callback = if (!options.json_output) &CallbackState.progress_callback else null,
+            .completion_callback = if (!options.json_output) &CallbackState.completion_callback else null,
             .verbose = options.verbose,
         };
 

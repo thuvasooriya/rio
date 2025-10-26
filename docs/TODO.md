@@ -53,6 +53,24 @@ This file tracks planned improvements and open issues for rio.
   - useful for importing into spreadsheets
   - include all metrics in tabular format
 
+### preset configurations
+
+- [ ] add --preset flag for common test configurations
+  - --preset quick: fast validation (smaller size, shorter duration)
+    - 128MB file, 5s duration, all patterns
+  - --preset standard: default balanced testing (current defaults)
+    - 1GB file, 5s duration, all patterns
+  - --preset thorough: comprehensive testing (larger, longer)
+    - 4GB file, 30s duration, all patterns, multiple block sizes
+  - --preset ssd: optimized for SSD testing
+    - direct I/O mode, 4K and 1M block sizes
+  - --preset hdd: optimized for HDD testing
+    - larger block sizes, sequential focus
+- [ ] add --preset amorphous (requires queue depth support)
+  - replicate AmorphousDiskMark/CrystalDiskMark tests
+  - SEQ1M QD8, SEQ1M QD1, RND4K QD64, RND4K QD1
+  - display results in same format for easy comparison
+
 ### additional benchmarks
 
 - [ ] add mixed read/write patterns
@@ -107,6 +125,28 @@ This file tracks planned improvements and open issues for rio.
 - [ ] investigate multi-threaded I/O
   - measure scaling with multiple threads
   - compare with single-threaded performance
+
+## future enhancements (blocked by zig language features)
+
+### queue depth support (blocked: waiting for zig async/await)
+
+- [ ] implement async I/O with configurable queue depth
+  - currently queue_depth field exists in Config but is unused
+  - requires async/await or explicit platform-specific async I/O
+  - would enable AmorphousDiskMark-style tests:
+    - SEQ1M QD8: sequential 1MB blocks, queue depth 8
+    - SEQ1M QD1: sequential 1MB blocks, queue depth 1
+    - RND4K QD64: random 4KB blocks, queue depth 64
+    - RND4K QD1: random 4KB blocks, queue depth 1
+- [ ] add --queue-depth CLI argument
+  - expose queue depth configuration to user
+  - default: 1 (current synchronous behavior)
+- [ ] platform-specific async I/O implementations
+  - Linux: io_uring (kernel 5.1+) with fallback to synchronous
+  - macOS: kqueue-based async I/O with fallback
+  - Windows: IOCP (I/O completion ports) with fallback
+
+**note**: zig's async/await feature is currently being redesigned. once stable async/await is released, implement proper queue depth support to match tools like AmorphousDiskMark, CrystalDiskMark, and fio.
 
 ## notes
 

@@ -17,6 +17,7 @@ pub const Config = struct {
     pattern_type: Pattern.PatternType = .random,
     queue_depth: u32 = 1,
     progress_callback: ?*const fn (elapsed_s: f64, total_s: f64, throughput_bps: f64) void = null,
+    completion_callback: ?*const fn () void = null,
     verbose: bool = false,
 };
 
@@ -45,6 +46,7 @@ pub fn prepareFile(self: *Benchmark, path: []const u8, size: u64, block_size: us
         .mode = .buffered,
         .file_size = size,
         .block_size = block_size,
+        .pattern = .sequential,
     });
     defer engine.deinit();
 
@@ -56,14 +58,8 @@ pub fn prepareFile(self: *Benchmark, path: []const u8, size: u64, block_size: us
     );
     defer Pattern.freePattern(self.allocator, buffer);
 
-    var offset: u64 = 0;
-    while (offset < size) {
-        const chunk_size = @min(block_size, size - offset);
-        _ = try engine.write(offset, buffer[0..chunk_size]);
-        offset += chunk_size;
-    }
+    try engine.fastFill(size, buffer);
 
-    try engine.sync();
     if (verbose) {
         std.log.info("Test file prepared successfully", .{});
     }
@@ -100,8 +96,11 @@ fn runSequentialRead(self: *Benchmark, cfg: Config) !BenchmarkMetrics {
         .mode = cfg.io_mode,
         .file_size = cfg.file_size,
         .block_size = cfg.block_size,
+        .pattern = .sequential,
     });
     defer engine.deinit();
+
+    engine.dropCache();
 
     const buffer = try Pattern.generatePattern(
         self.allocator,
@@ -159,6 +158,10 @@ fn runSequentialRead(self: *Benchmark, cfg: Config) !BenchmarkMetrics {
     const elapsed_ns = end_time - start_time;
     const elapsed_ms = @as(u64, @intCast(@divFloor(elapsed_ns, std.time.ns_per_ms)));
 
+    if (cfg.completion_callback) |callback| {
+        callback();
+    }
+
     try latency.calculate();
 
     const elapsed_s = @as(f64, @floatFromInt(elapsed_ns)) / @as(f64, std.time.ns_per_s);
@@ -178,8 +181,11 @@ fn runSequentialWrite(self: *Benchmark, cfg: Config) !BenchmarkMetrics {
         .mode = cfg.io_mode,
         .file_size = cfg.file_size,
         .block_size = cfg.block_size,
+        .pattern = .sequential,
     });
     defer engine.deinit();
+
+    engine.dropCache();
 
     const buffer = try Pattern.generatePattern(
         self.allocator,
@@ -239,6 +245,10 @@ fn runSequentialWrite(self: *Benchmark, cfg: Config) !BenchmarkMetrics {
     const elapsed_ns = end_time - start_time;
     const elapsed_ms = @as(u64, @intCast(@divFloor(elapsed_ns, std.time.ns_per_ms)));
 
+    if (cfg.completion_callback) |callback| {
+        callback();
+    }
+
     try latency.calculate();
 
     const elapsed_s = @as(f64, @floatFromInt(elapsed_ns)) / @as(f64, std.time.ns_per_s);
@@ -258,8 +268,11 @@ fn runRandomRead(self: *Benchmark, cfg: Config) !BenchmarkMetrics {
         .mode = cfg.io_mode,
         .file_size = cfg.file_size,
         .block_size = cfg.block_size,
+        .pattern = .random,
     });
     defer engine.deinit();
+
+    engine.dropCache();
 
     const buffer = try Pattern.generatePattern(
         self.allocator,
@@ -325,6 +338,10 @@ fn runRandomRead(self: *Benchmark, cfg: Config) !BenchmarkMetrics {
     const elapsed_ns = end_time - start_time;
     const elapsed_ms = @as(u64, @intCast(@divFloor(elapsed_ns, std.time.ns_per_ms)));
 
+    if (cfg.completion_callback) |callback| {
+        callback();
+    }
+
     try latency.calculate();
 
     const elapsed_s = @as(f64, @floatFromInt(elapsed_ns)) / @as(f64, std.time.ns_per_s);
@@ -344,8 +361,11 @@ fn runRandomWrite(self: *Benchmark, cfg: Config) !BenchmarkMetrics {
         .mode = cfg.io_mode,
         .file_size = cfg.file_size,
         .block_size = cfg.block_size,
+        .pattern = .random,
     });
     defer engine.deinit();
+
+    engine.dropCache();
 
     const buffer = try Pattern.generatePattern(
         self.allocator,
@@ -412,6 +432,10 @@ fn runRandomWrite(self: *Benchmark, cfg: Config) !BenchmarkMetrics {
     const end_time = std.time.nanoTimestamp();
     const elapsed_ns = end_time - start_time;
     const elapsed_ms = @as(u64, @intCast(@divFloor(elapsed_ns, std.time.ns_per_ms)));
+
+    if (cfg.completion_callback) |callback| {
+        callback();
+    }
 
     try latency.calculate();
 

@@ -4,11 +4,17 @@ const types = @import("../core/types.zig");
 
 const IoEngine = @This();
 
+pub const AccessPattern = enum {
+    sequential,
+    random,
+};
+
 pub const Config = struct {
     path: []const u8,
     mode: types.IOMode = .direct,
     file_size: u64,
     block_size: u64 = 4096,
+    pattern: ?AccessPattern = null,
 };
 
 file_handle: FileHandle,
@@ -22,7 +28,7 @@ const FileHandle = switch (builtin.os.tag) {
 };
 
 pub fn init(allocator: std.mem.Allocator, config: Config) !IoEngine {
-    const handle = try openFile(config.path, config.mode);
+    const handle = try openFile(config.path, config.mode, config.pattern);
 
     return .{
         .file_handle = handle,
@@ -35,11 +41,40 @@ pub fn deinit(self: *IoEngine) void {
     closeFile(self.file_handle);
 }
 
-fn openFile(path: []const u8, mode: types.IOMode) !FileHandle {
+fn openFile(path: []const u8, mode: types.IOMode, pattern: ?AccessPattern) !FileHandle {
     return switch (builtin.os.tag) {
-        .linux => @import("platform/linux.zig").openDirect(path, mode),
-        .macos => @import("platform/darwin.zig").openDirect(path, mode),
-        .windows => @import("platform/windows.zig").openDirect(path, mode),
+        .linux => blk: {
+            const fd = try @import("platform/linux.zig").openDirect(path, mode);
+            if (pattern) |p| {
+                const hint: @import("platform/linux.zig").FadviseHint = switch (p) {
+                    .sequential => .sequential,
+                    .random => .random,
+                };
+                @import("platform/linux.zig").setReadaheadHint(fd, hint);
+            }
+            break :blk fd;
+        },
+        .macos => blk: {
+            const fd = try @import("platform/darwin.zig").openDirect(path, mode);
+            if (pattern) |p| {
+                const hint: @import("platform/darwin.zig").FadviseHint = switch (p) {
+                    .sequential => .sequential,
+                    .random => .random,
+                };
+                @import("platform/darwin.zig").setReadaheadHint(fd, hint);
+            }
+            break :blk fd;
+        },
+        .windows => blk: {
+            const win_pattern: ?@import("platform/windows.zig").AccessPattern = if (pattern) |p|
+                switch (p) {
+                    .sequential => .sequential,
+                    .random => .random,
+                }
+            else
+                null;
+            break :blk try @import("platform/windows.zig").openWithPattern(path, mode, win_pattern);
+        },
         else => @compileError("Unsupported platform"),
     };
 }
@@ -76,6 +111,24 @@ pub fn sync(self: *IoEngine) !void {
                 return error.SyncFailed;
             }
         },
+        else => @compileError("Unsupported platform"),
+    }
+}
+
+pub fn dropCache(self: *IoEngine) void {
+    switch (builtin.os.tag) {
+        .linux => @import("platform/linux.zig").setReadaheadHint(self.file_handle, .drop_cache),
+        .macos => @import("platform/darwin.zig").setReadaheadHint(self.file_handle, .drop_cache),
+        .windows => {},
+        else => {},
+    }
+}
+
+pub fn fastFill(self: *IoEngine, size: u64, pattern_buffer: []const u8) !void {
+    switch (builtin.os.tag) {
+        .linux => try @import("platform/linux.zig").fastFillFile(self.file_handle, size, pattern_buffer),
+        .macos => try @import("platform/darwin.zig").fastFillFile(self.file_handle, size, pattern_buffer),
+        .windows => try @import("platform/windows.zig").fastFillFile(self.file_handle, size, pattern_buffer),
         else => @compileError("Unsupported platform"),
     }
 }

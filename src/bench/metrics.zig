@@ -39,6 +39,11 @@ pub const Latency = struct {
     p99_us: u64,
     samples: std.ArrayList(u64),
     allocator: std.mem.Allocator,
+    total_count: u64,
+    total_sum: u64,
+    rng: std.Random.DefaultPrng,
+
+    const MAX_SAMPLES: usize = 10000; // reservoir sampling limit
 
     pub fn init(allocator: std.mem.Allocator) Latency {
         return .{
@@ -49,6 +54,9 @@ pub const Latency = struct {
             .p99_us = 0,
             .samples = std.ArrayList(u64){},
             .allocator = allocator,
+            .total_count = 0,
+            .total_sum = 0,
+            .rng = std.Random.DefaultPrng.init(@intCast(std.time.nanoTimestamp())),
         };
     }
 
@@ -57,25 +65,37 @@ pub const Latency = struct {
     }
 
     pub fn record(self: *Latency, latency_us: u64) !void {
-        try self.samples.append(self.allocator, latency_us);
         self.min_us = @min(self.min_us, latency_us);
         self.max_us = @max(self.max_us, latency_us);
+        self.total_sum += latency_us;
+        self.total_count += 1;
+
+        // reservoir sampling: keep fixed number of samples
+        if (self.samples.items.len < MAX_SAMPLES) {
+            try self.samples.append(self.allocator, latency_us);
+        } else {
+            // randomly replace an existing sample using persistent RNG
+            const idx = self.rng.random().uintLessThan(u64, self.total_count);
+            if (idx < MAX_SAMPLES) {
+                self.samples.items[@intCast(idx)] = latency_us;
+            }
+        }
     }
 
     pub fn calculate(self: *Latency) !void {
-        if (self.samples.items.len == 0) return;
+        if (self.total_count == 0) return;
 
-        var sum: u64 = 0;
-        for (self.samples.items) |sample| {
-            sum += sample;
+        // use accurate average from all samples
+        self.avg_us = @as(f64, @floatFromInt(self.total_sum)) / @as(f64, @floatFromInt(self.total_count));
+
+        // percentiles from reservoir sample (fast sort of max 10k items)
+        if (self.samples.items.len > 0) {
+            std.mem.sort(u64, self.samples.items, {}, std.sort.asc(u64));
+
+            const stats = @import("../core/stats.zig");
+            self.p95_us = stats.percentile(self.samples.items, 0.95);
+            self.p99_us = stats.percentile(self.samples.items, 0.99);
         }
-        self.avg_us = @as(f64, @floatFromInt(sum)) / @as(f64, @floatFromInt(self.samples.items.len));
-
-        std.mem.sort(u64, self.samples.items, {}, std.sort.asc(u64));
-
-        const stats = @import("../core/stats.zig");
-        self.p95_us = stats.percentile(self.samples.items, 0.95);
-        self.p99_us = stats.percentile(self.samples.items, 0.99);
     }
 };
 

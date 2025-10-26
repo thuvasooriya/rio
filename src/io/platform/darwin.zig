@@ -34,3 +34,27 @@ pub fn fullSync(fd: posix.fd_t) !void {
         return error.SyncFailed;
     }
 }
+
+pub const FadviseHint = enum {
+    sequential,
+    random,
+    drop_cache,
+};
+
+pub fn setReadaheadHint(fd: posix.fd_t, hint: FadviseHint) void {
+    _ = fd;
+    _ = hint;
+}
+
+pub fn fastFillFile(fd: posix.fd_t, size: u64, pattern_buffer: []const u8) !void {
+    var written: u64 = 0;
+    const chunk_size = pattern_buffer.len;
+
+    while (written < size) {
+        const to_write = @min(chunk_size, size - written);
+        const bytes = try posix.pwrite(fd, pattern_buffer[0..to_write], written);
+        written += bytes;
+    }
+
+    try fullSync(fd);
+}
