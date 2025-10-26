@@ -63,17 +63,15 @@ zig build -Doptimize=ReleaseFast
 ### example output
 
 ```
-rio benchmarking /tmp
-test file: /tmp/rio_bench_20250126_172430.dat (256.00 MB)
-
-preparing test file...  100% done
-
-seq-read    throughput: 3.45 GB/s    iops: 882k    latency: p95=1.2ms p99=2.1ms
-seq-write   throughput: 2.89 GB/s    iops: 740k    latency: p95=1.5ms p99=2.8ms
-rand-read   throughput: 487 MB/s     iops: 125k    latency: p95=8.2ms p99=12.4ms
-rand-write  throughput: 412 MB/s     iops: 105k    latency: p95=9.7ms p99=14.2ms
-
-benchmark complete
+╭────────────────────────────────────────────────────────────────────╮
+│ path: /Users/sooriya                                               │
+│ size: 1GB  |  block: 4 KB  |  duration: 5s  |  mode: buffered      │
+├────────────────────────────────────────────────────────────────────┤
+│ ✓ Sequential Read    3.77 Gbps  |  987K IOPS  |  0.92μs avg        │
+│ ✓ Sequential Write   1.75 Gbps  |  486K IOPS  |  1.97μs avg        │
+│ ✓ Random Read        2.41 Gbps  |  633K IOPS  |  1.50μs avg        │
+│ ✓ Random Write       1.28 Gbps  |  366K IOPS  |  2.64μs avg        │
+╰────────────────────────────────────────────────────────────────────╯
 ```
 
 ## command-line options

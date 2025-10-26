@@ -70,9 +70,10 @@ This file tracks planned improvements and open issues for rio.
 
 ### usability
 
-- [ ] add progress bar for long benchmarks
-  - show current iteration / total iterations
-  - show elapsed time and ETA
+- [x] add progress indicators for benchmarks
+  - show real-time spinner with elapsed time during execution
+  - color-coded metrics (throughput and latency)
+  - checkmark on completion
 - [ ] add quiet mode flag
   - minimal output (just final results)
   - useful for scripting
