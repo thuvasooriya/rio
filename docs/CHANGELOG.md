@@ -2,8 +2,39 @@
 
 ## unreleased
 
+### ui improvements
+
+- changed path separator in second line from @ to · for cleaner visual appearance (src/cli/app.zig:139)
+- reduced minimum box width from 66 to 0 to eliminate excessive whitespace (src/cli/app.zig:186)
+- box now automatically sizes to content instead of enforcing minimum width
+
+### code cleanup
+
+- removed dead code from src/cli/reporter.zig
+  - deleted unused printText(), printHeader(), printFooter(), printResultsBox() functions
+  - deleted duplicate getThroughputColor() (theme.zig version is used instead)
+  - deleted unused formatThroughput() function
+  - all functionality now handled by app.zig with proper theme integration
+- completed comprehensive pre-release codebase review
+  - verified all core/, io/, bench/, cli/ modules for safety and consistency
+  - verified build.zig, version.zig, main.zig, test.zig clean and minimal
+  - all tests passing, no critical issues found
+  - ready for release
+
 ### improvements
 
+- centralized theme configuration in cli/theme.zig
+  - created Theme struct with all UI color definitions (border, app_name, version, spinner, checkmark, elapsed_time)
+  - extracted threshold constants for throughput and latency color coding
+  - getThroughputColor() and getLatencyColor() as module-level helper functions
+  - default theme instance for easy access
+  - all color decisions now in one place for easy customization
+- enhanced output styling with colored box borders and header
+  - box borders and dividers: magenta color for visual distinction
+  - header line: "rio" in green, version in blue, followed by path and settings
+  - unified header format: "rio v{version}      | path: {dir}"
+  - second line shows test parameters: size, block size, duration, mode
+  - consistent box width with proper ANSI escape code handling
 - added color highlighting to benchmark metrics
   - throughput: green (>=5 Gbps), cyan (>=1 Gbps), yellow (<1 Gbps)
   - IOPS: bold text for emphasis

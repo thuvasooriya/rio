@@ -1,6 +1,6 @@
 .{
     .name = .rio,
-    .version = "0.0.2",
+    .version = "0.0.2-alpha",
     .fingerprint = 0xc106c90bc47aee55,
     .minimum_zig_version = "0.15.2",
     .dependencies = .{},

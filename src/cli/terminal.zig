@@ -1,28 +1,35 @@
 const std = @import("std");
+const theme = @import("theme.zig");
 
 // ANSI escape codes for terminal control
 pub const Color = enum {
     reset,
     bold,
     dim,
+    italic,
+    bold_italic,
     red,
     green,
     yellow,
     blue,
     cyan,
     magenta,
+    gray,
 
     pub fn code(self: Color) []const u8 {
         return switch (self) {
             .reset => "\x1b[0m",
             .bold => "\x1b[1m",
             .dim => "\x1b[2m",
+            .italic => "\x1b[3m",
+            .bold_italic => "\x1b[1;3m",
             .red => "\x1b[31m",
             .green => "\x1b[32m",
             .yellow => "\x1b[33m",
             .blue => "\x1b[34m",
             .cyan => "\x1b[36m",
             .magenta => "\x1b[35m",
+            .gray => "\x1b[90m",
         };
     }
 };
@@ -253,18 +260,22 @@ pub const Terminal = struct {
         var line_count: usize = 0;
 
         // top border
+        if (self.use_ansi) try self.write(theme.default.border.code());
         try self.write(top_left);
         var i: usize = 0;
         while (i < max_width + 2) : (i += 1) {
             try self.write(horizontal);
         }
         try self.write(top_right);
+        if (self.use_ansi) try self.write(Color.reset.code());
         try self.write("\n");
         line_count += 1;
 
         // header lines
         for (header_lines) |line| {
+            if (self.use_ansi) try self.write(theme.default.border.code());
             try self.write(vertical);
+            if (self.use_ansi) try self.write(Color.reset.code());
             try self.write(" ");
             try self.write(line);
             const padding = max_width - visualWidth(line);
@@ -273,26 +284,32 @@ pub const Terminal = struct {
                 try self.write(" ");
             }
             try self.write(" ");
+            if (self.use_ansi) try self.write(theme.default.border.code());
             try self.write(vertical);
+            if (self.use_ansi) try self.write(Color.reset.code());
             try self.write("\n");
             line_count += 1;
         }
 
         // divider (only if we have content)
         if (content_lines.len > 0) {
+            if (self.use_ansi) try self.write(theme.default.border.code());
             try self.write(divider_left);
             i = 0;
             while (i < max_width + 2) : (i += 1) {
                 try self.write(horizontal);
             }
             try self.write(divider_right);
+            if (self.use_ansi) try self.write(Color.reset.code());
             try self.write("\n");
             line_count += 1;
         }
 
         // content lines
         for (content_lines) |line| {
+            if (self.use_ansi) try self.write(theme.default.border.code());
             try self.write(vertical);
+            if (self.use_ansi) try self.write(Color.reset.code());
             try self.write(" ");
             try self.write(line);
             const padding = max_width - visualWidth(line);
@@ -301,18 +318,22 @@ pub const Terminal = struct {
                 try self.write(" ");
             }
             try self.write(" ");
+            if (self.use_ansi) try self.write(theme.default.border.code());
             try self.write(vertical);
+            if (self.use_ansi) try self.write(Color.reset.code());
             try self.write("\n");
             line_count += 1;
         }
 
         // bottom border
+        if (self.use_ansi) try self.write(theme.default.border.code());
         try self.write(bottom_left);
         i = 0;
         while (i < max_width + 2) : (i += 1) {
             try self.write(horizontal);
         }
         try self.write(bottom_right);
+        if (self.use_ansi) try self.write(Color.reset.code());
         try self.write("\n");
         line_count += 1;
 
