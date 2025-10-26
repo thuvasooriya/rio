@@ -1,0 +1,93 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-linux
+            os: ubuntu-latest
+            zig_target: x86_64-linux
+            archive_name: rio-x86_64-linux.tar.gz
+          - target: aarch64-linux
+            os: ubuntu-latest
+            zig_target: aarch64-linux
+            archive_name: rio-aarch64-linux.tar.gz
+          - target: x86_64-macos
+            os: macos-13
+            zig_target: x86_64-macos
+            archive_name: rio-x86_64-macos.tar.gz
+          - target: aarch64-macos
+            os: macos-14
+            zig_target: aarch64-macos
+            archive_name: rio-aarch64-macos.tar.gz
+          - target: x86_64-windows
+            os: windows-latest
+            zig_target: x86_64-windows
+            archive_name: rio-x86_64-windows.zip
+          - target: aarch64-windows
+            os: windows-latest
+            zig_target: aarch64-windows
+            archive_name: rio-aarch64-windows.zip
+
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+
+      - name: setup zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: build release binary
+        run: zig build -Doptimize=ReleaseFast -Dtarget=${{ matrix.zig_target }} -Dcpu=baseline
+
+      - name: create archive (unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd zig-out/bin
+          tar czf ../../${{ matrix.archive_name }} rio
+          cd ../..
+
+      - name: create archive (windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd zig-out/bin
+          Compress-Archive -Path rio.exe -DestinationPath ../../${{ matrix.archive_name }}
+          cd ../..
+
+      - name: upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: ${{ matrix.archive_name }}
+
+  release:
+    name: create release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+
+      - name: download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: create release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: artifacts/**/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true

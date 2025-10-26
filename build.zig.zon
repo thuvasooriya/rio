@@ -1,0 +1,12 @@
+.{
+    .name = .rio,
+    .version = "0.0.2",
+    .fingerprint = 0xc106c90bc47aee55,
+    .minimum_zig_version = "0.15.2",
+    .dependencies = .{},
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
